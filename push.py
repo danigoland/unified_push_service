@@ -41,6 +41,10 @@ appconfig = None
 # - Make this more fail safe -- use Backends and a Task Queue or something so that we can guarantee delivery, and so it doesn't tie up the request when we are broadcasting to a very large number of devices
 # - Properly handle feedback from the APNS Feedback service
 
+class PushModel(ndb.Model):
+    sent_to = ndb.IntegerProperty(indexed=True, default=0)
+    received_by = ndb.IntegerProperty(indexed=True, default=0)
+    sent_date = ndb.DateTimeProperty(indexed=False, auto_now_add=True)
 
 def convertToGcmMessage(self, message):
     gcmmessage = {}
@@ -154,22 +158,27 @@ def broadcastGcmMessage(self, message):
     gcm_reg_ids = []
     q = GcmToken.query(GcmToken.enabled == True)
     x=0
-
+    push_notification = PushModel(sent_to=q.count())
+    push_id = push_notification.put().id()
+    gcmmessage["data"]["push_id"]=push_id
+    print(push_id)
     for token in q.iter():
         if x == appconfig.gcm_multicast_limit:
             #sendMulticastGcmMessage(self, gcm_reg_ids, gcmmessage)
             taskqueue.add(url = '/push/gcmtask',params={'message':json.dumps(gcmmessage),'reg':json.dumps(gcm_reg_ids)})
             gcm_reg_ids.clear()
             x = 0
-        
+
         gcm_reg_ids.append(token.gcm_token)
         x = x + 1
-    
     if len(gcm_reg_ids) > 0:
         #sendMulticastGcmMessage(self, gcm_reg_ids, gcmmessage)
         print(gcm_reg_ids)
         print(gcmmessage)
         taskqueue.add(url = '/push/gcmtask',params={'message':json.dumps(gcmmessage),'reg':json.dumps(gcm_reg_ids)})
+
+
+
     return x;
 
 
@@ -208,7 +217,7 @@ class BroadcastMessage(webapp2.RequestHandler):
         if 1 in msg["request"]["platforms"]:
             #Send to Android devices using GCM
             x = broadcastGcmMessage(self, convertToGcmMessage(self, msg))
-    
+
         if 2 in msg["request"]["platforms"]:
             #Send to iOS devices using APNS
             broadcastApnsMessage(self, convertToApnsMessage(self, msg))
@@ -279,10 +288,21 @@ class apnstask(webapp2.RequestHandler):
         print(x)
         sendMulticastApnsMessage(self,s,x)
 
+class gcm_received(webapp2.RequestHandler):
+
+    def post(self):
+        push_id = self.request.get("push_id")
+        print(long(push_id))
+        push_model=PushModel.get_by_id(long(push_id))
+        push_model.received_by= push_model.received_by+1
+        push_model.put()
+        self.response.write("OK")
+
 app = webapp2.WSGIApplication([
     ('/push/tagbroadcast', BroadcastMessageToTag),
     ('/push/broadcast', BroadcastMessage),
     ('/push/send', SendMessage),
     ('/push/gcmtask', gcmtask),
-    ('/push/apnstask',apnstask)
+    ('/push/apnstask',apnstask),
+    ('/push/gcmreceived',gcm_received)
 ], debug=True)

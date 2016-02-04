@@ -40,12 +40,11 @@ class GCMRegister(webapp2.RequestHandler):
     def post(self):
         regid = self.request.get("regId")
         if not regid:
-            self.response.out.write('Must specify regid')
+            self.response.out.write('invalid')
         else:
-            token = GcmToken.get_or_insert(regid)
-            token.gcm_token = regid
-            token.enabled = True
-            token.put()
+            token = GcmToken(gcm_token=regid)
+            key = token.put()
+            self.response.write(str(key.id()))
 
 class GCMUnregister(webapp2.RequestHandler):
     def post(self):

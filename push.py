@@ -297,6 +297,16 @@ class gcm_received(webapp2.RequestHandler):
         push_model.received_by= push_model.received_by+1
         push_model.put()
         self.response.write("OK")
+class gcm_refresh(webapp2.RequestHandler):
+
+    def post(self):
+        user_id = self.request.get("user_id")
+        new_token = self.request.get("new_token")
+        x=GcmToken.get_by_id(long(user_id))
+        x.gcm_token= new_token
+        key = x.put()
+        self.response.write(str(key.id()))
+
 
 app = webapp2.WSGIApplication([
     ('/push/tagbroadcast', BroadcastMessageToTag),
@@ -304,5 +314,6 @@ app = webapp2.WSGIApplication([
     ('/push/send', SendMessage),
     ('/push/gcmtask', gcmtask),
     ('/push/apnstask',apnstask),
-    ('/push/gcmreceived',gcm_received)
+    ('/push/gcmreceived',gcm_received),
+    ('/push/gcmrefresh',gcm_refresh)
 ], debug=True)

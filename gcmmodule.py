@@ -39,10 +39,11 @@ appconfig = None
 class GCMRegister(webapp2.RequestHandler):
     def post(self):
         regid = self.request.get("regId")
+        country = self.request.get("country")
         if not regid:
             self.response.out.write('invalid')
         else:
-            token = GcmToken(gcm_token=regid)
+            token = GcmToken(gcm_token=regid,country=country)
             key = token.put()
             self.response.write(str(key.id()))
 

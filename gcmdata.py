@@ -7,6 +7,7 @@ from google.appengine.ext import ndb
 
 class GcmToken(ndb.Model):
     gcm_token = ndb.StringProperty(indexed=True)
+    country = ndb.StringProperty(indexed=True, default="n/a")
     enabled = ndb.BooleanProperty(indexed=True, default=True)
     registration_date = ndb.DateTimeProperty(indexed=False, auto_now_add=True)
 

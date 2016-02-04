@@ -246,6 +246,27 @@ class BroadcastMessageToTag(webapp2.RequestHandler):
             
         #Return result
         self.response.write("OK")
+#TODO:Finish broadcast by country
+class BroadcastMessageToCountry(webapp2.RequestHandler):
+    def post(self):
+        msg = json.loads(self.request.get("message"))
+        if 1 in msg["request"]["platforms"]:
+            country = self.request.get("country")
+
+            q = GcmToken.query(GcmToken.country == country)
+            for tag in q.iter():
+                sendSingleGcmMessage(self, convertToGcmMessage(self, msg), tag.token.get().gcm_token)
+
+        if 2 in msg["request"]["platforms"]:
+            #Send to iOS devices using APNS
+            tagid = self.request.get("tagid")
+
+            q = ApnsSandboxTag.query(ApnsSandboxTag.tag == tagid)
+            for tag in q.iter():
+                sendSingleApnsMessage(self, convertToApnsMessage(self, msg), tag.token.get().apns_token)
+
+        #Return result
+        self.response.write("OK")
 
 
 #Sample POST Data -->  platform=1&token=<device token string>&message={"request":{"data":{"custom": "json data"}, "ios_message":"This is a test","ios_button_text":"yeah!","ios_badge": -1, "ios_sound": "soundfile", "android_collapse_key": "collapsekey"}}

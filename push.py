@@ -42,6 +42,8 @@ appconfig = None
 # - Properly handle feedback from the APNS Feedback service
 
 class PushModel(ndb.Model):
+    country = ndb.StringProperty(indexed=True)
+    tag = ndb.StringProperty(indexed=True)
     sent_to = ndb.IntegerProperty(indexed=True, default=0)
     received_by = ndb.IntegerProperty(indexed=True, default=0)
     sent_date = ndb.DateTimeProperty(indexed=False, auto_now_add=True)
@@ -166,7 +168,7 @@ def broadcastGcmMessage(self, message):
         if x == appconfig.gcm_multicast_limit:
             #sendMulticastGcmMessage(self, gcm_reg_ids, gcmmessage)
             taskqueue.add(url = '/push/gcmtask',params={'message':json.dumps(gcmmessage),'reg':json.dumps(gcm_reg_ids)})
-            gcm_reg_ids.clear()
+            gcm_reg_ids=[]
             x = 0
 
         gcm_reg_ids.append(token.gcm_token)
@@ -199,7 +201,7 @@ def broadcastApnsMessage(self, message):
             #sendMulticastApnsMessage(self, apns_reg_ids, apnsmessage)
             taskqueue.add(url = '/push/apnstask',params={'message':json.dumps(apnsmessage),'reg':json.dumps(apns_reg_ids)})
 
-            apns_reg_ids.clear()
+            apns_reg_ids=[]
             x = 0
         
         apns_reg_ids.append(token.apns_token)
@@ -250,12 +252,27 @@ class BroadcastMessageToTag(webapp2.RequestHandler):
 class BroadcastMessageToCountry(webapp2.RequestHandler):
     def post(self):
         msg = json.loads(self.request.get("message"))
+        country = self.request.get("country")
         if 1 in msg["request"]["platforms"]:
-            country = self.request.get("country")
-
-            q = GcmToken.query(GcmToken.country == country)
-            for tag in q.iter():
-                sendSingleGcmMessage(self, convertToGcmMessage(self, msg), tag.token.get().gcm_token)
+                appconfig = AppConfig.get_or_insert("config")
+                gcmmessage = convertToGcmMessage(self,msg)
+                gcm_reg_ids = []
+                x=0
+                q = GcmToken.query(GcmToken.country == country)
+                push_notification = PushModel(sent_to=q.count(),country=country)
+                push_id = push_notification.put().id()
+                gcmmessage["data"]["push_id"]=push_id
+                for token in q.iter():
+                    if x == appconfig.gcm_multicast_limit:
+                        taskqueue.add(url = '/push/gcmtask',params={'message':json.dumps(gcmmessage),'reg':json.dumps(gcm_reg_ids)})
+                        gcm_reg_ids=[]
+                        x = 0
+                    gcm_reg_ids.append(token.gcm_token)
+                    x = x + 1
+                if len(gcm_reg_ids) > 0:
+                    print(gcm_reg_ids)
+                    print(gcmmessage)
+                    taskqueue.add(url = '/push/gcmtask',params={'message':json.dumps(gcmmessage),'reg':json.dumps(gcm_reg_ids)})
 
         if 2 in msg["request"]["platforms"]:
             #Send to iOS devices using APNS
@@ -332,6 +349,7 @@ class gcm_refresh(webapp2.RequestHandler):
 app = webapp2.WSGIApplication([
     ('/push/tagbroadcast', BroadcastMessageToTag),
     ('/push/broadcast', BroadcastMessage),
+    ('/push/countrybroadcast',BroadcastMessageToCountry),
     ('/push/send', SendMessage),
     ('/push/gcmtask', gcmtask),
     ('/push/apnstask',apnstask),
